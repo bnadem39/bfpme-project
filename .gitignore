@@ -1,0 +1,34 @@
+.DS_Store
+Thumbs.db
+
+# Root local artifacts
+output/
+Microsoft/
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.venv/
+venv/
+
+# AI service local data
+AI-Service/venv/
+AI-Service/output/
+AI-Service/tmp/
+AI-Service/uploads/
+AI-Service/__pycache__/
+AI-Service/app/**/__pycache__/
+AI-Service/tessdata_best/
+
+# Node / Next / Nest local artifacts
+bfpme-backend/node_modules/
+bfpme-backend/dist/
+bfpme-backend/.npm-cache/
+bfpme-frontend/node_modules/
+bfpme-frontend/.next/
+
+# Environment files
+.env
+.env.*

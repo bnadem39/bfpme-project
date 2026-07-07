@@ -1,0 +1,32 @@
+@import "tailwindcss";
+
+:root {
+  --background: #f4f7fa; /* Light gray-blue background for dashboard */
+  --foreground: #111827; /* Dark slate for text */
+  
+  /* Brand colors - Corporate Blue */
+  --color-primary: #1d4ed8; 
+  --color-primary-hover: #1e40af;
+  
+  --color-surface: #ffffff;
+  --color-border: #e5e7eb;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-primary: var(--color-primary);
+  --color-primary-hover: var(--color-primary-hover);
+  --color-surface: var(--color-surface);
+  --color-border: var(--color-border);
+  --font-sans: "Segoe UI";
+  --font-mono: "Consolas";
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+  margin: 0;
+  padding: 0;
+}
