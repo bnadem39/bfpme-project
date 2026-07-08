@@ -1,11 +1,18 @@
 import axios from 'axios';
 
-export const API_BASE_URL = 'http://localhost:3000';
+function getApiBaseUrl() {
+  if (process.env.NEXT_PUBLIC_API_URL) {
+    return process.env.NEXT_PUBLIC_API_URL;
+  }
 
-export const api = axios.create({
-  baseURL: API_BASE_URL,
-  timeout: 190000,
-});
+  if (typeof window !== 'undefined') {
+    const protocol = window.location.protocol;
+    const hostname = window.location.hostname;
+    return `${protocol}//${hostname}:3001`;
+  }
+
+  return 'http://127.0.0.1:3001';
+}
 
 export interface JudgmentExtractionResult {
   tribunal: string | null;
@@ -46,23 +53,37 @@ export interface Stats {
   anomalie: number;
 }
 
-export const judgementsApi = {
-  getAll: () => api.get<Judgment[]>('/judgments').then((r) => r.data),
+function createApiClient() {
+  return axios.create({
+    baseURL: getApiBaseUrl(),
+    timeout: 190000,
+  });
+}
 
-  getStats: () => api.get<Stats>('/judgments/stats').then((r) => r.data),
+export const judgementsApi = {
+  getAll: () =>
+    createApiClient()
+      .get<Judgment[]>('/judgments')
+      .then((r) => r.data),
+
+  getStats: () =>
+    createApiClient()
+      .get<Stats>('/judgments/stats')
+      .then((r) => r.data),
 
   upload: (client: string, file: File) => {
     const formData = new FormData();
     formData.append('client', client);
     formData.append('file', file);
-    return api
+
+    return createApiClient()
       .post<Judgment>('/judgments/upload', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       })
       .then((r) => r.data);
   },
 
-  getFileUrl: (id: number) => `${API_BASE_URL}/judgments/${id}/file`,
+  getFileUrl: (id: number) => `${getApiBaseUrl()}/judgments/${id}/file`,
 
-  remove: (id: number) => api.delete(`/judgments/${id}`),
+  remove: (id: number) => createApiClient().delete(`/judgments/${id}`),
 };
