@@ -34,6 +34,20 @@ export class JudgmentsController {
     return this.judgmentsService.getStats();
   }
 
+  /** POST /judgments/backfill - Copie le JSON extrait vers les colonnes dediees */
+  @Post('backfill')
+  @HttpCode(HttpStatus.OK)
+  backfillExtractedColumns() {
+    return this.judgmentsService.backfillExtractedColumns();
+  }
+
+  /** POST /judgments/:id/retry-extraction - Relance l'extraction IA depuis le PDF stocke */
+  @Post(':id/retry-extraction')
+  @HttpCode(HttpStatus.OK)
+  retryExtraction(@Param('id', ParseIntPipe) id: number) {
+    return this.judgmentsService.retryExtraction(id);
+  }
+
   /** POST /judgments/upload - Upload d'un PDF et enregistrement en base */
   @Post('upload')
   @HttpCode(HttpStatus.CREATED)

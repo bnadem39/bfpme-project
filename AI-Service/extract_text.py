@@ -62,9 +62,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "pdf",
         nargs="?",
-        default="uploads/002.pdf",
+        default="uploads/Xerox Scan_04062026143239.pdf",
         metavar="PDF",
-        help="Chemin du PDF a traiter (defaut : uploads/002.pdf)",
+        help="Chemin du PDF a traiter (defaut : uploads/Xerox Scan_04062026143239.pdf)",
     )
     parser.add_argument("-o", "--output-dir", default="output")
     parser.add_argument("--force-ocr", action="store_true")

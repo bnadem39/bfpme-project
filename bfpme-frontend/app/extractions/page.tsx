@@ -36,6 +36,7 @@ function ExtractionsContent() {
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [selectedResult, setSelectedResult] = useState<Judgment | null>(null);
+  const [retryingId, setRetryingId] = useState<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const loadExtractions = async () => {
@@ -125,7 +126,11 @@ function ExtractionsContent() {
       setIsModalOpen(false);
       setClientName('');
       setSelectedFile(null);
-      setSuccessMsg(`Extraction ${created.ref} terminee.`);
+      setSuccessMsg(
+        created.status === 'Anomalie'
+          ? `Document ${created.ref} enregistre avec une anomalie.`
+          : `Extraction ${created.ref} terminee.`,
+      );
       setTimeout(() => setSuccessMsg(null), 5000);
     } catch (err: unknown) {
       let msg = "Erreur lors de l'upload.";
@@ -162,6 +167,63 @@ function ExtractionsContent() {
       }
     } catch {
       alert('Erreur lors de la suppression.');
+    }
+  };
+
+  const replaceExtraction = (updated: Judgment) => {
+    setExtractions((prev) =>
+      prev.map((extraction) =>
+        extraction.id === updated.id ? updated : extraction,
+      ),
+    );
+    setSelectedResult((current) =>
+      current?.id === updated.id ? updated : current,
+    );
+  };
+
+  const getAxiosMessage = (err: unknown, fallback: string) => {
+    if (axios.isAxiosError(err)) {
+      return (
+        (typeof err.response?.data?.message === 'string' &&
+          err.response.data.message) ||
+        err.message ||
+        fallback
+      );
+    }
+    if (err instanceof Error) {
+      return err.message;
+    }
+    return fallback;
+  };
+
+  const handleRetryExtraction = async (judgment: Judgment) => {
+    if (retryingId !== null) return;
+
+    setRetryingId(judgment.id);
+    setError(null);
+    setSuccessMsg(null);
+
+    try {
+      const updated = await judgementsApi.retryExtraction(judgment.id);
+      replaceExtraction(updated);
+
+      if (updated.status === 'Valide') {
+        setSuccessMsg(`Extraction ${updated.ref} relancee avec succes.`);
+        setTimeout(() => setSuccessMsg(null), 5000);
+      } else {
+        setError(
+          `Relance terminee avec anomalie pour ${updated.ref}. Consultez le detail de l'erreur.`,
+        );
+      }
+    } catch (err: unknown) {
+      setError(
+        getAxiosMessage(
+          err,
+          "Erreur lors de la relance de l'extraction.",
+        ),
+      );
+    } finally {
+      setRetryingId(null);
     }
   };
 
@@ -225,6 +287,49 @@ function ExtractionsContent() {
     );
   };
 
+  const getDisplayExtractionResult = (
+    judgment: Judgment,
+  ): JudgmentExtractionResult | null => {
+    if (judgment.extractionResult) {
+      return judgment.extractionResult;
+    }
+
+    const hasExtractedColumns = Boolean(
+      judgment.tribunal ||
+        judgment.numeroDossier ||
+        judgment.dateDecision ||
+        judgment.demandeur ||
+        judgment.defendeur ||
+        judgment.montant ||
+        judgment.explicationMontant ||
+        judgment.referencesJuridiques ||
+        judgment.decision ||
+        judgment.decisionJustification ||
+        judgment.resume,
+    );
+
+    if (!hasExtractedColumns) {
+      return null;
+    }
+
+    return {
+      tribunal: judgment.tribunal,
+      numero_dossier: judgment.numeroDossier,
+      date_decision: judgment.dateDecision,
+      parties: {
+        demandeur: judgment.demandeur,
+        defendeur: judgment.defendeur,
+      },
+      montant: judgment.montant,
+      explication_montant: judgment.explicationMontant,
+      montant_justification: judgment.explicationMontant,
+      references_juridiques: judgment.referencesJuridiques,
+      decision: judgment.decision,
+      decision_justification: judgment.decisionJustification,
+      resume: judgment.resume,
+    };
+  };
+
   const renderExtractionResult = (result: JudgmentExtractionResult | null) => {
     if (!result) {
       return (
@@ -239,12 +344,18 @@ function ExtractionsContent() {
         {renderField('Tribunal', result.tribunal)}
         {renderField('Numero dossier', result.numero_dossier)}
         {renderField('Date decision', result.date_decision)}
-        {renderField('Banque', result.banque)}
-        {renderField('Entreprise', result.entreprise)}
         {renderField('Montant', result.montant)}
         {renderField('Demandeur', result.parties.demandeur)}
         {renderField('Defendeur', result.parties.defendeur)}
         {renderField('Decision', result.decision)}
+        <div className="space-y-1 md:col-span-2">
+          <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+            Explication du montant
+          </p>
+          <p className="text-sm text-foreground">
+            {result.explication_montant || result.montant_justification || '-'}
+          </p>
+        </div>
         <div className="space-y-1 md:col-span-2">
           <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
             References juridiques
@@ -413,7 +524,11 @@ function ExtractionsContent() {
                         >
                           {ext.fileName}
                         </td>
-                        <td className="px-6 py-4">{getStatusBadge(ext.status)}</td>
+                        <td className="px-6 py-4">
+                          {getStatusBadge(
+                            retryingId === ext.id ? 'En cours' : ext.status,
+                          )}
+                        </td>
                         <td className="flex items-center justify-end gap-1 px-6 py-4 text-right">
                           <button
                             onClick={() => setSelectedResult(ext)}
@@ -429,6 +544,21 @@ function ExtractionsContent() {
                           >
                             <Eye className="h-4 w-4" />
                           </button>
+                          {ext.status === 'Anomalie' && (
+                            <button
+                              onClick={() => handleRetryExtraction(ext)}
+                              disabled={retryingId !== null}
+                              title="Relancer l'extraction"
+                              className="inline-flex cursor-pointer items-center gap-1 rounded px-2 py-1.5 text-xs font-medium text-orange-600 transition-colors hover:bg-orange-50 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              {retryingId === ext.id ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <RefreshCw className="h-4 w-4" />
+                              )}
+                              Relancer
+                            </button>
+                          )}
                           <button
                             onClick={() => handleDelete(ext.id)}
                             title="Supprimer"
@@ -465,7 +595,12 @@ function ExtractionsContent() {
                     : 'Selectionnez une extraction'}
                 </p>
               </div>
-              {selectedResult && getStatusBadge(selectedResult.status)}
+              {selectedResult &&
+                getStatusBadge(
+                  retryingId === selectedResult.id
+                    ? 'En cours'
+                    : selectedResult.status,
+                )}
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -477,7 +612,15 @@ function ExtractionsContent() {
                   {renderField('Type PDF', selectedResult.pdfType)}
                   {renderField('Methode', selectedResult.extractionMethod)}
                 </div>
-                {renderExtractionResult(selectedResult.extractionResult)}
+                {selectedResult.errorMessage && (
+                  <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-700">
+                    <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0" />
+                    <span>{selectedResult.errorMessage}</span>
+                  </div>
+                )}
+                {renderExtractionResult(
+                  getDisplayExtractionResult(selectedResult),
+                )}
               </>
             ) : (
               <p className="text-sm text-gray-500">

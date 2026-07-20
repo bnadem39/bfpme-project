@@ -18,13 +18,29 @@ export interface JudgmentExtractionResult {
   tribunal: string | null;
   numero_dossier: string | null;
   date_decision: string | null;
+  type_jugement?: string | null;
+  role_bfpme?: string | null;
   parties: {
     demandeur: string | null;
     defendeur: string | null;
   };
-  banque: string | null;
-  entreprise: string | null;
+  montants_fixes?: Array<{
+    libelle_original: string | null;
+    valeur_originale: string | null;
+    valeur_millimes: number | null;
+    accorde_bfpme: boolean | null;
+    fixe: boolean | null;
+    include_dans_total: boolean | null;
+    raison_inclusion_exclusion: string | null;
+  }> | null;
+  montants_variables?: Array<{
+    libelle_original: string | null;
+    formule_originale: string | null;
+    raison_non_calculable: string | null;
+  }> | null;
   montant: string | null;
+  explication_montant: string | null;
+  montant_justification: string | null;
   references_juridiques: string[] | null;
   decision: string | null;
   decision_justification: string | null;
@@ -40,6 +56,17 @@ export interface Judgment {
   fileName: string;
   fileSize: string;
   extractionResult: JudgmentExtractionResult | null;
+  tribunal: string | null;
+  numeroDossier: string | null;
+  dateDecision: string | null;
+  demandeur: string | null;
+  defendeur: string | null;
+  montant: string | null;
+  explicationMontant: string | null;
+  referencesJuridiques: string[] | null;
+  decision: string | null;
+  decisionJustification: string | null;
+  resume: string | null;
   aiModel: string | null;
   pdfType: string | null;
   extractionMethod: string | null;
@@ -56,7 +83,7 @@ export interface Stats {
 function createApiClient() {
   return axios.create({
     baseURL: getApiBaseUrl(),
-    timeout: 190000,
+    timeout: 610000,
   });
 }
 
@@ -82,6 +109,11 @@ export const judgementsApi = {
       })
       .then((r) => r.data);
   },
+
+  retryExtraction: (id: number) =>
+    createApiClient()
+      .post<Judgment>(`/judgments/${id}/retry-extraction`)
+      .then((r) => r.data),
 
   getFileUrl: (id: number) => `${getApiBaseUrl()}/judgments/${id}/file`,
 

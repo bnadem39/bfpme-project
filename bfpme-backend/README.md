@@ -35,7 +35,7 @@ $ npm install
 
 ```bash
 # development
-$ npm run start
+$ 
 
 # watch mode
 $ npm run start:dev
@@ -96,3 +96,6 @@ Nest is an MIT-licensed open source project. It can grow thanks to the sponsors 
 ## License
 
 Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+
+
+IA command :  .\venv\Scripts\python.exe -m uvicorn app.api.main:app --host 127.0.0.1 --port 8000npm run start

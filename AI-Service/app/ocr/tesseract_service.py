@@ -1,9 +1,11 @@
 """OCR arabe base sur Tesseract."""
 
 import os
+import re
 import shutil
 from pathlib import Path
 
+import fitz  # PyMuPDF
 import pytesseract
 from pdf2image import convert_from_path
 from PIL import Image, ImageOps
@@ -24,6 +26,10 @@ TESSERACT_PSM_MODES = tuple(
     mode.strip()
     for mode in os.getenv("TESSERACT_PSM_MODES", "6,11").split(",")
     if mode.strip()
+)
+OCR_STRUCTURED_ANCHOR_PATTERN = re.compile(
+    r"(?:القضي[ةه]|تاريخ|المحكم[ةه]|المدع[ىي]|تمويل|المؤسسات|"
+    r"قضت|ل[هي]ذه|أسباب|المبالغ\s+المالية)"
 )
 
 
@@ -81,14 +87,25 @@ def pdf_to_images(
 ) -> list[str]:
     os.makedirs(output_dir, exist_ok=True)
     poppler_path = POPPLER_PATH if os.path.isdir(POPPLER_PATH) else None
-    images = convert_from_path(pdf_path, dpi=dpi, poppler_path=poppler_path)
 
     image_paths = []
     base_name = os.path.splitext(os.path.basename(pdf_path))[0]
-    for index, image in enumerate(images, start=1):
-        image_path = os.path.join(output_dir, f"{base_name}_page_{index}.png")
-        image.save(image_path, "PNG")
-        image_paths.append(image_path)
+    if poppler_path or shutil.which("pdfinfo"):
+        images = convert_from_path(pdf_path, dpi=dpi, poppler_path=poppler_path)
+        for index, image in enumerate(images, start=1):
+            image_path = os.path.join(output_dir, f"{base_name}_page_{index}.png")
+            image.save(image_path, "PNG")
+            image_paths.append(image_path)
+        return image_paths
+
+    zoom = dpi / 72
+    matrix = fitz.Matrix(zoom, zoom)
+    with fitz.open(pdf_path) as document:
+        for index, page in enumerate(document, start=1):
+            pixmap = page.get_pixmap(matrix=matrix, alpha=False)
+            image_path = os.path.join(output_dir, f"{base_name}_page_{index}.png")
+            pixmap.save(image_path)
+            image_paths.append(image_path)
     return image_paths
 
 
@@ -152,8 +169,72 @@ def _choose_candidate(candidates: list[dict]) -> dict:
     )
 
 
+def _normalize_ocr_line(value: str) -> str:
+    return re.sub(r"[\W_]+", "", value or "", flags=re.UNICODE)
+
+
+def _structured_candidate_lines(text: str) -> list[str]:
+    """Keep short windows around legal header and dispositive anchors."""
+    lines = [line.strip() for line in (text or "").splitlines() if line.strip()]
+    selected: list[str] = []
+    seen: set[str] = set()
+
+    for index, line in enumerate(lines):
+        if not OCR_STRUCTURED_ANCHOR_PATTERN.search(line):
+            continue
+        for context_line in lines[max(0, index - 1):min(len(lines), index + 3)]:
+            normalized = _normalize_ocr_line(context_line)
+            if normalized and normalized not in seen:
+                seen.add(normalized)
+                selected.append(context_line)
+    return selected
+
+
+def _merge_ocr_candidates(candidates: list[dict]) -> dict:
+    """Preserve structured data read by an alternate Tesseract PSM mode.
+
+    PSM 6 generally gives the best continuous body text, whereas PSM 11 often
+    recognizes headers, case numbers, and party labels more accurately on court
+    scans. Dropping the latter solely on average confidence loses key fields.
+    """
+    primary = _choose_candidate(candidates)
+    primary_lines = {
+        _normalize_ocr_line(line)
+        for line in primary["text"].splitlines()
+        if _normalize_ocr_line(line)
+    }
+    supplementary: list[str] = []
+    seen = set(primary_lines)
+    supplementary_seen: set[str] = set()
+
+    for candidate in candidates:
+        if candidate is primary:
+            continue
+        for line in _structured_candidate_lines(candidate["text"]):
+            normalized = _normalize_ocr_line(line)
+            is_anchor = bool(OCR_STRUCTURED_ANCHOR_PATTERN.search(line))
+            if (
+                normalized
+                and normalized not in supplementary_seen
+                and (normalized not in seen or is_anchor)
+            ):
+                seen.add(normalized)
+                supplementary_seen.add(normalized)
+                supplementary.append(line)
+
+    if not supplementary:
+        return primary
+
+    return {
+        **primary,
+        # Put the supplemental header first so downstream extractors and the
+        # context compactor see it even when the first page is long.
+        "text": "\n".join([*supplementary, primary["text"]]).strip(),
+    }
+
+
 def _ocr_with_psm_modes(image, return_meta: bool = False):
-    candidate = _choose_candidate([
+    candidate = _merge_ocr_candidates([
         _extract_candidate(image, psm) for psm in TESSERACT_PSM_MODES
     ])
     return candidate if return_meta else candidate["text"]

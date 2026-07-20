@@ -16,6 +16,9 @@ from app.ocr.tesseract_service import ocr_pdf
 from app.preprocess.text_cleaner import clean_text
 
 
+DEFAULT_MODEL = os.getenv("LM_STUDIO_MODEL", "qwen/qwen3.5-9b")
+
+
 def _parse_origins() -> list[str]:
     raw_origins = os.getenv("CORS_ALLOW_ORIGINS", "*")
     return [origin.strip() for origin in raw_origins.split(",") if origin.strip()]
@@ -63,7 +66,9 @@ def extract_judgment_text(pdf_path: str, force_ocr: bool = False) -> tuple[str, 
     if not raw_text or not raw_text.strip():
         raise RuntimeError("Le PDF n'a produit aucun texte exploitable.")
 
-    cleaned_text = clean_text(raw_text)
+    # Page markers let the LLM context selector keep the header and the final
+    # dispositive pages of long scanned judgments.
+    cleaned_text = clean_text(raw_text, keep_page_markers=True)
     if not cleaned_text.strip():
         raise RuntimeError("Le texte extrait est vide apres nettoyage.")
 
@@ -226,4 +231,3 @@ async def extract_pdf(request: Request):
     finally:
         if temp_path and os.path.exists(temp_path):
             os.unlink(temp_path)
-DEFAULT_MODEL = os.getenv("LM_STUDIO_MODEL", "qwen2.5-7b-instruct-1m")
